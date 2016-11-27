@@ -53,3 +53,4 @@ dkms.conf
 # Compiled
 source/dos_cp
 source/dos_ls
+source/dos_scandisk
