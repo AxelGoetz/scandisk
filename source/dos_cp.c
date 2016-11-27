@@ -20,7 +20,7 @@
 
 /* get_name retrieves the filename from a directory entry */
 
-void get_name(char *fullname, struct direntry *dirent) 
+void get_name(char *fullname, struct direntry *dirent)
 {
   char name[9];
   char extension[4];
@@ -33,21 +33,21 @@ void get_name(char *fullname, struct direntry *dirent)
 
   /* names are space padded - remove the padding */
   for (i = 8; i > 0; i--) {
-    if (name[i] == ' ') 
+    if (name[i] == ' ')
       name[i] = '\0';
-    else 
+    else
       break;
   }
 
   /* extensions aren't normally space padded - but remove the
      padding anyway if it's there */
   for (i = 3; i > 0; i--) {
-    if (extension[i] == ' ') 
+    if (extension[i] == ' ')
       extension[i] = '\0';
-    else 
+    else
       break;
   }
-  fullname[0]='\0';
+  fullname[0] = '\0';
   strcat(fullname, name);
 
   /* append the extension if it's not a directory */
@@ -66,8 +66,7 @@ void get_name(char *fullname, struct direntry *dirent)
 #define FIND_DIR 1
 
 struct direntry* find_file(char *infilename, uint16_t cluster,
- int find_mode,
- uint8_t *image_buf, struct bpb33* bpb)
+  int find_mode, uint8_t *image_buf, struct bpb33* bpb)
 {
   char buf[MAXPATHLEN];
   char *seek_name, *next_name;
@@ -116,7 +115,7 @@ struct direntry* find_file(char *infilename, uint16_t cluster,
     /* hunt a cluster for the relevant dirent.  If we reach the
        end of the cluster, we'll need to go to the next cluster
        for this directory */
-    for (d = 0; d < bpb->bpbBytesPerSec * bpb->bpbSecPerClust; 
+    for (d = 0; d < bpb->bpbBytesPerSec * bpb->bpbSecPerClust;
       d += sizeof(struct direntry)) {
       if (dirent->deName[0] == SLOT_EMPTY) {
         /* we failed to find the file */
@@ -128,7 +127,7 @@ struct direntry* find_file(char *infilename, uint16_t cluster,
         continue;
       }
       get_name(fullname, dirent);
-      if (strcmp(fullname, seek_name)==0) {
+      if (strcmp(fullname, seek_name) == 0) {
         /* found it! */
         if ((dirent->deAttributes & ATTR_DIRECTORY) != 0) {
           /* it's a directory */
@@ -137,7 +136,7 @@ struct direntry* find_file(char *infilename, uint16_t cluster,
             exit(1);
           }
           dir_cluster = getushort(dirent->deStartCluster);
-          return find_file(next_name, dir_cluster, 
+          return find_file(next_name, dir_cluster,
            find_mode, image_buf, bpb);
         } else if ((dirent->deAttributes & ATTR_VOLUME) != 0) {
           /* it's a volume */
@@ -157,7 +156,7 @@ struct direntry* find_file(char *infilename, uint16_t cluster,
       dirent++;
     } else {
       cluster = get_fat_entry(cluster, image_buf, bpb);
-      dirent = (struct direntry*)cluster_to_addr(cluster, 
+      dirent = (struct direntry*)cluster_to_addr(cluster,
        image_buf, bpb);
     }
   }
@@ -168,7 +167,7 @@ struct direntry* find_file(char *infilename, uint16_t cluster,
    a time */
 
 void copy_out_file(FILE *fd, uint16_t cluster, uint32_t bytes_remaining,
- uint8_t *image_buf, struct bpb33* bpb)
+  uint8_t *image_buf, struct bpb33* bpb)
 {
   int total_clusters, clust_size;
   uint8_t *p;
@@ -179,7 +178,7 @@ void copy_out_file(FILE *fd, uint16_t cluster, uint32_t bytes_remaining,
     fprintf(stderr, "Bad file termination\n");
     return;
   } else if (is_end_of_file(cluster)) {
-    return; 
+    return;
   } else if (cluster > total_clusters) {
     abort(); /* this shouldn't be able to happen */
   }
@@ -195,7 +194,7 @@ void copy_out_file(FILE *fd, uint16_t cluster, uint32_t bytes_remaining,
     fwrite(p, clust_size, 1, fd);
 
     /* recurse, continuing to copy */
-    copy_out_file(fd, get_fat_entry(cluster, image_buf, bpb), 
+    copy_out_file(fd, get_fat_entry(cluster, image_buf, bpb),
       bytes_remaining - clust_size, image_buf, bpb);
   }
   return;
@@ -205,7 +204,7 @@ void copy_out_file(FILE *fd, uint16_t cluster, uint32_t bytes_remaining,
    regular file in the file system */
 
 void copyout(char *infilename, char* outfilename,
- uint8_t *image_buf, struct bpb33* bpb)
+  uint8_t *image_buf, struct bpb33* bpb)
 {
   struct direntry *dirent = (void*)1;
   FILE *fd;
@@ -236,7 +235,7 @@ void copyout(char *infilename, char* outfilename,
   start_cluster = getushort(dirent->deStartCluster);
   size = getulong(dirent->deFileSize);
   copy_out_file(fd, start_cluster, size, image_buf, bpb);
-  
+
   fclose(fd);
 }
 
@@ -244,7 +243,7 @@ void copyout(char *infilename, char* outfilename,
    image, updates the FAT, and returns the starting cluster of the
    file */
 
-uint16_t copy_in_file(FILE* fd, uint8_t *image_buf, struct bpb33* bpb, 
+uint16_t copy_in_file(FILE* fd, uint8_t *image_buf, struct bpb33* bpb,
   uint32_t *size)
 {
   uint32_t clust_size, total_clusters, i;
@@ -252,17 +251,17 @@ uint16_t copy_in_file(FILE* fd, uint8_t *image_buf, struct bpb33* bpb,
   size_t bytes;
   uint16_t start_cluster = 0;
   uint16_t prev_cluster = 0;
-  
+
   clust_size = bpb->bpbSecPerClust * bpb->bpbBytesPerSec;
   total_clusters = bpb->bpbSectors / bpb->bpbSecPerClust;
   buf = malloc(clust_size);
   while(1) {
-  /* read a block of data, and store it */
+    /* read a block of data, and store it */
     bytes = fread(buf, 1, clust_size, fd);
     if (bytes > 0) {
       *size += bytes;
 
-    /* find a free cluster */
+      /* find a free cluster */
       for (i = 2; i < total_clusters; i++) {
         if (get_fat_entry(i, image_buf, bpb) == CLUST_FREE) {
           break;
@@ -270,30 +269,30 @@ uint16_t copy_in_file(FILE* fd, uint8_t *image_buf, struct bpb33* bpb,
       }
 
       if (i == total_clusters) {
-    /* oops - we ran out of disk space */
+      /* oops - we ran out of disk space */
         fprintf(stderr, "No more space in filesystem\n");
-    /* we should clean up here, rather than just exit */ 
+      /* we should clean up here, rather than just exit */
         exit(1);
       }
 
-    /* remember the first cluster, as we need to store this in
-       the dirent */
+      /* remember the first cluster, as we need to store this in
+         the dirent */
       if (start_cluster == 0) {
         start_cluster = i;
       } else {
-    /* link the previous cluster to this one in the FAT */
+      /* link the previous cluster to this one in the FAT */
         assert(prev_cluster != 0);
         set_fat_entry(prev_cluster, i, image_buf, bpb);
       }
-    /* make sure we've recorded this cluster as used */
+      /* make sure we've recorded this cluster as used */
       set_fat_entry(i, FAT12_MASK&CLUST_EOFS, image_buf, bpb);
 
-    /* copy the data into the cluster */
+      /* copy the data into the cluster */
       memcpy(cluster_to_addr(i, image_buf, bpb), buf, clust_size);
     }
     if (bytes < clust_size) {
-    /* We didn't real a full cluster, so we either got a read
-       error, or reached end of file.  We exit anyway */
+      /* We didn't real a full cluster, so we either got a read
+         error, or reached end of file.  We exit anyway */
       break;
     }
     prev_cluster = i;
@@ -304,8 +303,8 @@ uint16_t copy_in_file(FILE* fd, uint8_t *image_buf, struct bpb33* bpb,
 }
 
 /* write the values into a directory entry */
-void write_dirent(struct direntry *dirent, char *filename, 
- uint16_t start_cluster, uint32_t size)
+void write_dirent(struct direntry *dirent, char *filename,
+  uint16_t start_cluster, uint32_t size)
 {
   char *p, *p2;
   char *uppername;
@@ -341,7 +340,7 @@ void write_dirent(struct direntry *dirent, char *filename,
     if (len > 3) len = 3;
     memcpy(dirent->deExtension, p, len);
   }
-  if (strlen(uppername)>8) {
+  if (strlen(uppername) > 8) {
     uppername[8]='\0';
   }
   memcpy(dirent->deName, uppername, strlen(uppername));
@@ -360,24 +359,23 @@ void write_dirent(struct direntry *dirent, char *filename,
 /* create_dirent finds a free slot in the directory, and write the
    directory entry */
 
-void create_dirent(struct direntry *dirent, char *filename, 
- uint16_t start_cluster, uint32_t size,
- uint8_t *image_buf, struct bpb33* bpb)
+void create_dirent(struct direntry *dirent, char *filename,
+  uint16_t start_cluster, uint32_t size, uint8_t *image_buf, struct bpb33* bpb)
 {
   while(1) {
     if (dirent->deName[0] == SLOT_EMPTY) {
-    /* we found an empty slot at the end of the directory */
+      /* we found an empty slot at the end of the directory */
       write_dirent(dirent, filename, start_cluster, size);
       dirent++;
 
-    /* make sure the next dirent is set to be empty, just in
-       case it wasn't before */
+      /* make sure the next dirent is set to be empty, just in
+         case it wasn't before */
       memset((uint8_t*)dirent, 0, sizeof(struct direntry));
       dirent->deName[0] = SLOT_EMPTY;
       return;
     }
     if (dirent->deName[0] == SLOT_DELETED) {
-    /* we found a deleted entry - we can just overwrite it */
+      /* we found a deleted entry - we can just overwrite it */
       write_dirent(dirent, filename, start_cluster, size);
       return;
     }
@@ -389,7 +387,7 @@ void create_dirent(struct direntry *dirent, char *filename,
    file in the FAT-12 memory disk image  */
 
 void copyin(char *infilename, char* outfilename,
- uint8_t *image_buf, struct bpb33* bpb)
+  uint8_t *image_buf, struct bpb33* bpb)
 {
   struct direntry *dirent = (void*)1;
   FILE *fd;
@@ -426,7 +424,7 @@ void copyin(char *infilename, char* outfilename,
 
   /* create the directory entry */
   create_dirent(dirent, outfilename, start_cluster, size, image_buf, bpb);
-  
+
   fclose(fd);
 }
 

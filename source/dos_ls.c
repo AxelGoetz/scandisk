@@ -31,7 +31,7 @@ void follow_dir(uint16_t cluster, int indent,
   int d, i;
   dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
   while (1) {
-    for (d = 0; d < bpb->bpbBytesPerSec * bpb->bpbSecPerClust; 
+    for (d = 0; d < bpb->bpbBytesPerSec * bpb->bpbSecPerClust;
         d += sizeof(struct direntry)) {
       char name[9];
       char extension[4];
@@ -41,7 +41,7 @@ void follow_dir(uint16_t cluster, int indent,
       extension[3] = ' ';
       memcpy(name, &(dirent->deName[0]), 8);
       memcpy(extension, dirent->deExtension, 3);
-      
+
       if (name[0] == SLOT_EMPTY)
         return;
 
@@ -51,17 +51,17 @@ void follow_dir(uint16_t cluster, int indent,
 
       /* names are space padded - remove the spaces */
       for (i = 8; i > 0; i--) {
-        if (name[i] == ' ') 
+        if (name[i] == ' ')
           name[i] = '\0';
-        else 
+        else
           break;
       }
 
       /* remove the spaces from extensions */
       for (i = 3; i > 0; i--) {
-        if (extension[i] == ' ') 
+        if (extension[i] == ' ')
           extension[i] = '\0';
-        else 
+        else
           break;
       }
 
@@ -85,7 +85,7 @@ void follow_dir(uint16_t cluster, int indent,
       } else {
         size = getulong(dirent->deFileSize);
         print_indent(indent);
-        printf("%s.%s (%u bytes)\n", 
+        printf("%s.%s (%u bytes)\n",
           name, extension, size);
       }
       dirent++;
@@ -95,7 +95,7 @@ void follow_dir(uint16_t cluster, int indent,
       dirent++;
     } else {
       cluster = get_fat_entry(cluster, image_buf, bpb);
-      dirent = (struct direntry*)cluster_to_addr(cluster, 
+      dirent = (struct direntry*)cluster_to_addr(cluster,
         image_buf, bpb);
     }
   }

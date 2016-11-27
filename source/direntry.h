@@ -48,7 +48,7 @@
  * October 1992
  */
 
-/* 
+/*
  * Trimmed down by mjh, Nov 2005
  */
 
@@ -107,4 +107,3 @@ struct direntry {
 #define DD_MONTH_SHIFT    5
 #define DD_YEAR_MASK    0xFE00  /* year - 1980 */
 #define DD_YEAR_SHIFT   9
-

@@ -49,7 +49,7 @@
  */
 
 /*
- * Trimmed down by mjh, Nov 2005 
+ * Trimmed down by mjh, Nov 2005
  */
 
 /*
@@ -67,4 +67,3 @@
 #define	FAT12_MASK	0x00000fff	/* mask for 12 bit cluster numbers */
 #define	FAT16_MASK	0x0000ffff	/* mask for 16 bit cluster numbers */
 #define	FAT32_MASK	0x0fffffff	/* mask for FAT32 cluster numbers */
-
