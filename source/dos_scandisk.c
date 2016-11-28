@@ -178,10 +178,9 @@ void mark_file_cluster(uint16_t cluster, uint8_t *image_buf, struct bpb33* bpb, 
     return;
   } else if (cluster > total_clusters) {
     abort(); /* this shouldn't be able to happen */
-  } else {
-    /* more clusters after this one */
-    mark_file_cluster(get_fat_entry(cluster, image_buf, bpb), image_buf,bpb, bytes_remaining - clust_size, referenced_clusters);
   }
+  /* more clusters after this one */
+  mark_file_cluster(get_fat_entry(cluster, image_buf, bpb), image_buf, bpb, bytes_remaining - clust_size, referenced_clusters);
 }
 
 /**
@@ -205,7 +204,6 @@ void find_referenced_clusters(uint16_t cluster, uint8_t *image_buf, struct bpb33
       /* skip over deleted entries */
       if (((uint8_t)name[0]) == SLOT_DELETED)
         continue;
-
 
       removePadding(name, 8);
 
@@ -305,10 +303,12 @@ uint8_t create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, uint
     file_number++;
   } while(find_file(filename, 0, FIND_FILE, image_buf, bpb) != NULL);
 
+  uint32_t clust_size = bpb->bpbSecPerClust * bpb->bpbBytesPerSec;
+
   struct direntry *dirent = (struct direntry*) cluster_to_addr(0, image_buf, bpb);
   while(1) {
     if (dirent->deName[0] == SLOT_EMPTY) {
-      write_dirent(dirent, filename, cluster, size);
+      write_dirent(dirent, filename, cluster, size * clust_size);
       dirent++;
 
       // make sure the next dirent is set to be empty, just in case it wasn't before
@@ -318,7 +318,7 @@ uint8_t create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, uint
     }
     if (dirent->deName[0] == SLOT_DELETED) {
       // we found a deleted entry - we can just overwrite it
-      write_dirent(dirent, filename, cluster, size);
+      write_dirent(dirent, filename, cluster, size * clust_size);
       return file_number;
     }
     dirent++;
@@ -326,17 +326,26 @@ uint8_t create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, uint
 }
 
 /**
- * Gets the size of the given file and marks the clusters as referenced
+ * Gets the size of the given file (in clusters)
  */
-uint32_t get_file_size(int cluster, uint8_t *image_buf, struct bpb33* bpb, bool *referenced_clusters) {
+uint32_t get_file_size(int cluster, uint8_t *image_buf, struct bpb33* bpb) {
   uint32_t size = 0;
-  do {
-    referenced_clusters[cluster] = true;
+  while (!is_end_of_file(cluster)) {
     cluster = get_fat_entry(cluster, image_buf, bpb);
     size++;
-  } while (!is_end_of_file(cluster));
-  referenced_clusters[cluster] = true;
+  }
   return size;
+}
+
+/**
+ * Marks all the clusters as referenced
+ */
+void mark_clusters_referenced(int cluster, uint8_t *image_buf, struct bpb33* bpb, bool *referenced_clusters) {
+  while (!is_end_of_file(cluster)) {
+    referenced_clusters[cluster] = true;
+    cluster = get_fat_entry(cluster, image_buf, bpb);
+  }
+  referenced_clusters[cluster] = true;
 }
 
 
@@ -359,10 +368,94 @@ void find_unreferenced_files(uint8_t *image_buf, struct bpb33* bpb, bool *refere
 
   for(int i = 2; i < total_clusters; i++) {
     if(referenced_clusters[i] == false && get_fat_entry(i, image_buf, bpb) != CLUST_FREE) {
-      uint16_t size = get_file_size(i, image_buf, bpb, referenced_clusters);
+      uint16_t size = get_file_size(i, image_buf, bpb);
+      mark_clusters_referenced(i, image_buf, bpb, referenced_clusters);
       printf("Lost File: %i %i\n", i, size);
 
       files_found = create_new_file(i, image_buf,bpb, files_found, size);
+    }
+  }
+}
+
+/**
+ * Frees all the clusters inbetween and including the true end and the false end cluster
+ */
+void free_clusters(uint16_t true_end, uint16_t false_end, uint8_t *image_buf, struct bpb33* bpb) {
+  uint16_t current = true_end;
+
+  while(true_end != false_end && !is_end_of_file(current)) {
+      uint16_t next = get_fat_entry(current, image_buf, bpb);
+      set_fat_entry(current, FAT12_MASK&CLUST_FREE, image_buf, bpb);
+      current = next;
+  }
+
+  set_fat_entry(true_end, FAT12_MASK&CLUST_EOFS, image_buf, bpb);
+}
+
+/**
+ * Checks if the length of a file matches the one in the FAT
+ */
+void check_file_length(struct direntry *dirent, uint8_t *image_buf, struct bpb33* bpb, char *name, char *extension) {
+  uint16_t cluster_size = bpb->bpbBytesPerSec * bpb->bpbSecPerClust;
+
+  uint32_t size = getulong(dirent->deFileSize);
+  int32_t size_in_clusters = (size + cluster_size - 1) / cluster_size;
+
+  uint16_t cluster = getushort(dirent->deStartCluster);
+  uint16_t fat_size_in_clusters = get_file_size(cluster, image_buf, bpb);
+  uint32_t fat_size = fat_size_in_clusters * cluster_size;
+
+  if(fat_size_in_clusters > size_in_clusters) {
+    printf("%s.%s %i %i\n", name, extension, size, fat_size);
+    free_clusters(cluster + size_in_clusters - 1, cluster + fat_size_in_clusters, image_buf, bpb);
+  }
+  // No need to check smaller because that would not make sense
+}
+
+/**
+ * Goes through the directory tree and checks if the length of all files match.
+ */
+void find_length_mismatches(uint16_t cluster, uint8_t *image_buf, struct bpb33* bpb) {
+  struct direntry *dirent;
+  int d, length = bpb->bpbBytesPerSec * bpb->bpbSecPerClust;
+  dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
+  while (1) {
+    for (d = 0; d < length; d += sizeof(struct direntry)) {
+      char name[9], extension[4];
+      name[8] = ' ';
+      extension[3] = ' ';
+      memcpy(name, &(dirent->deName[0]), 8);
+      memcpy(extension, dirent->deExtension, 3);
+
+      if (name[0] == SLOT_EMPTY) {
+        return;
+      }
+
+      /* skip over deleted entries */
+      if (((uint8_t)name[0]) == SLOT_DELETED)
+        continue;
+
+      removePadding(name, 8);
+      removePadding(extension, 3);
+
+      if(strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+        dirent++; continue;
+      } else if ((dirent->deAttributes & ATTR_VOLUME) != 0) {
+        continue;
+      } else if ((dirent->deAttributes & ATTR_DIRECTORY) != 0) {
+        uint16_t file_cluster = getushort(dirent->deStartCluster);
+        find_length_mismatches(file_cluster, image_buf, bpb);
+      } else {
+        check_file_length(dirent, image_buf, bpb, name, extension);
+      }
+      dirent++;
+    }
+    if (cluster == 0) {
+      dirent++;
+    } else {
+      cluster = get_fat_entry(cluster, image_buf, bpb);
+      dirent = (struct direntry*)cluster_to_addr(cluster,
+        image_buf, bpb);
     }
   }
 }
@@ -388,7 +481,9 @@ int main(int argc, char** argv) {
   find_referenced_clusters(0, image_buf, bpb, referenced_clusters);
   display_unreferenced_clusters(image_buf, bpb, referenced_clusters, total_clusters);
   find_unreferenced_files(image_buf, bpb, referenced_clusters, total_clusters);
+  find_length_mismatches(0, image_buf, bpb);
 
+  free(bpb);
   close(fd);
   free(referenced_clusters);
   return 0;
