@@ -32,6 +32,136 @@ void removePadding(char *string, u_int8_t length) {
 }
 
 /**
+ * Gets the file name
+ */
+void get_name(char *fullname, struct direntry *dirent)
+{
+  char name[9];
+  char extension[4];
+
+  name[8] = ' ';
+  extension[3] = ' ';
+  memcpy(name, &(dirent->deName[0]), 8);
+  memcpy(extension, dirent->deExtension, 3);
+
+  removePadding(name, 8);
+  removePadding(extension, 3);
+
+  fullname[0] = '\0';
+  strcat(fullname, name);
+
+  /* append the extension if it's not a directory */
+  if ((dirent->deAttributes & ATTR_DIRECTORY) == 0) {
+    strcat(fullname, ".");
+    strcat(fullname, extension);
+  }
+}
+
+/**
+  * find_file seeks through the directories in the memory disk image,
+  * until it finds the named file
+  */
+#define FIND_FILE 0
+#define FIND_DIR 1
+
+struct direntry* find_file(char *infilename, uint16_t cluster,
+  int find_mode, uint8_t *image_buf, struct bpb33* bpb)
+{
+  char buf[MAXPATHLEN];
+  char *seek_name, *next_name;
+  int d;
+  struct direntry *dirent;
+  uint16_t dir_cluster;
+  char fullname[13];
+
+  /* find the first dirent in this directory */
+  dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
+
+  /* first we need to split the file name we're looking for into the
+     first part of the path, and the remainder.  We hunt through the
+     current directory for the first part.  If there's a remainder,
+     and what we find is a directory, then we recurse, and search
+     that directory for the remainder */
+
+  strncpy(buf, infilename, MAXPATHLEN);
+  seek_name = buf;
+
+  /* trim leading slashes */
+  while (*seek_name == '/' || *seek_name == '\\') {
+    seek_name++;
+  }
+
+  /* search for any more slashes - if so, it's a dirname */
+  next_name = seek_name;
+  while (1) {
+    if (*next_name == '/' || *next_name == '\\') {
+      *next_name = '\0';
+      next_name ++;
+      break;
+    }
+    if (*next_name == '\0') {
+      /* end of name - no slashes found */
+      next_name = NULL;
+      if (find_mode == FIND_DIR) {
+        return dirent;
+      }
+      break;
+    }
+    next_name++;
+  }
+
+  while (1) {
+    /* hunt a cluster for the relevant dirent.  If we reach the
+       end of the cluster, we'll need to go to the next cluster
+       for this directory */
+    for (d = 0; d < bpb->bpbBytesPerSec * bpb->bpbSecPerClust;
+      d += sizeof(struct direntry)) {
+      if (dirent->deName[0] == SLOT_EMPTY) {
+        /* we failed to find the file */
+        return NULL;
+      }
+      if (dirent->deName[0] == SLOT_DELETED) {
+        /* skip over a deleted file */
+        dirent++;
+        continue;
+      }
+      get_name(fullname, dirent);
+      if (strcmp(fullname, seek_name) == 0) {
+        /* found it! */
+        if ((dirent->deAttributes & ATTR_DIRECTORY) != 0) {
+          /* it's a directory */
+          if (next_name == NULL) {
+            fprintf(stderr, "Cannot copy out a directory\n");
+            exit(1);
+          }
+          dir_cluster = getushort(dirent->deStartCluster);
+          return find_file(next_name, dir_cluster,
+           find_mode, image_buf, bpb);
+        } else if ((dirent->deAttributes & ATTR_VOLUME) != 0) {
+          /* it's a volume */
+          fprintf(stderr, "Cannot copy out a volume\n");
+          exit(1);
+        } else {
+          /* assume it's a file */
+          return dirent;
+        }
+      }
+      dirent++;
+    }
+    /* we've reached the end of the cluster for this directory.
+       Where's the next cluster? */
+    if (cluster == 0) {
+      // root dir is special
+      dirent++;
+    } else {
+      cluster = get_fat_entry(cluster, image_buf, bpb);
+      dirent = (struct direntry*)cluster_to_addr(cluster,
+       image_buf, bpb);
+    }
+  }
+}
+
+/**
  * For a file, goes through the FAT and marks every cluster as
  * referenced.
  */
@@ -44,7 +174,7 @@ void mark_file_cluster(uint16_t cluster, uint8_t *image_buf, struct bpb33* bpb, 
   if (cluster == 0) {
     fprintf(stderr, "Bad file termination\n");
     return;
-  } else if (is_end_of_file(cluster) || bytes_remaining < clust_size) {
+  } else if (is_end_of_file(cluster)) {
     return;
   } else if (cluster > total_clusters) {
     abort(); /* this shouldn't be able to happen */
@@ -58,6 +188,7 @@ void mark_file_cluster(uint16_t cluster, uint8_t *image_buf, struct bpb33* bpb, 
  * Loops through the directory structure and marks every cluster it sees as referenced (true).
  */
 void find_referenced_clusters(uint16_t cluster, uint8_t *image_buf, struct bpb33* bpb, bool *referenced_clusters) {
+  referenced_clusters[cluster] = true;
   struct direntry *dirent;
   int d, length = bpb->bpbBytesPerSec * bpb->bpbSecPerClust;
   dirent = (struct direntry*)cluster_to_addr(cluster, image_buf, bpb);
@@ -75,7 +206,6 @@ void find_referenced_clusters(uint16_t cluster, uint8_t *image_buf, struct bpb33
       if (((uint8_t)name[0]) == SLOT_DELETED)
         continue;
 
-      referenced_clusters[cluster] = true;
 
       removePadding(name, 8);
 
@@ -165,8 +295,16 @@ void write_dirent(struct direntry *dirent, char *filename, uint16_t start_cluste
 
 /**
  * Creates a new file in the root directory
+ * Returns the new int for the filename
  */
-void create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, char *filename, uint32_t size) {
+uint8_t create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, uint8_t file_number, uint32_t size) {
+  // Find the correct filename
+  char filename[13]; filename[0] = '\0';
+  do {
+    sprintf(filename, "%s%i%s", "FOUND", file_number, ".DAT");
+    file_number++;
+  } while(find_file(filename, 0, FIND_FILE, image_buf, bpb) != NULL);
+
   struct direntry *dirent = (struct direntry*) cluster_to_addr(0, image_buf, bpb);
   while(1) {
     if (dirent->deName[0] == SLOT_EMPTY) {
@@ -176,12 +314,12 @@ void create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, char *f
       // make sure the next dirent is set to be empty, just in case it wasn't before
       memset((uint8_t*)dirent, 0, sizeof(struct direntry));
       dirent->deName[0] = SLOT_EMPTY;
-      return;
+      return file_number;
     }
     if (dirent->deName[0] == SLOT_DELETED) {
       // we found a deleted entry - we can just overwrite it
       write_dirent(dirent, filename, cluster, size);
-      return;
+      return file_number;
     }
     dirent++;
   }
@@ -192,15 +330,15 @@ void create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, char *f
  */
 uint32_t get_file_size(int cluster, uint8_t *image_buf, struct bpb33* bpb, bool *referenced_clusters) {
   uint32_t size = 0;
-  referenced_clusters[cluster] = true;
   do {
-    cluster = get_fat_entry(cluster, image_buf, bpb);
     referenced_clusters[cluster] = true;
+    cluster = get_fat_entry(cluster, image_buf, bpb);
     size++;
   } while (!is_end_of_file(cluster));
-
+  referenced_clusters[cluster] = true;
   return size;
 }
+
 
 /**
  * Displays the unreferenced clusters, as specified in the assignment
@@ -224,16 +362,10 @@ void find_unreferenced_files(uint8_t *image_buf, struct bpb33* bpb, bool *refere
       uint16_t size = get_file_size(i, image_buf, bpb, referenced_clusters);
       printf("Lost File: %i %i\n", i, size);
 
-      // 12 char + '\0'
-      char filename[13]; filename[0] = '\0';
-      sprintf(filename, "%s%i%s", "found", files_found, ".dat");
-
-      create_new_file(i, image_buf,bpb, filename, size);
-      files_found++;
+      files_found = create_new_file(i, image_buf,bpb, files_found, size);
     }
   }
 }
-
 
 void usage() {
   fprintf(stderr, "Usage: dos_scandisk <imagename>\n");
@@ -257,7 +389,7 @@ int main(int argc, char** argv) {
   display_unreferenced_clusters(image_buf, bpb, referenced_clusters, total_clusters);
   find_unreferenced_files(image_buf, bpb, referenced_clusters, total_clusters);
 
-
+  close(fd);
   free(referenced_clusters);
   return 0;
 }
