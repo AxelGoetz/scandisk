@@ -83,10 +83,11 @@ void follow_dir(uint16_t cluster, int indent,
         file_cluster = getushort(dirent->deStartCluster);
         follow_dir(file_cluster, indent+2, image_buf, bpb);
       } else {
+        file_cluster = getushort(dirent->deStartCluster);
         size = getulong(dirent->deFileSize);
         print_indent(indent);
-        printf("%s.%s (%u bytes)\n",
-          name, extension, size);
+        printf("%s.%s (%u bytes) (%i)\n",
+          name, extension, size, file_cluster);
       }
       dirent++;
     }

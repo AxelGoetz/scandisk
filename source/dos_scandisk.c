@@ -383,7 +383,7 @@ void find_unreferenced_files(uint8_t *image_buf, struct bpb33* bpb, bool *refere
 void free_clusters(uint16_t true_end, uint16_t false_end, uint8_t *image_buf, struct bpb33* bpb) {
   uint16_t current = true_end;
 
-  while(true_end != false_end && !is_end_of_file(current)) {
+  while(!is_end_of_file(current)) {
       uint16_t next = get_fat_entry(current, image_buf, bpb);
       set_fat_entry(current, FAT12_MASK&CLUST_FREE, image_buf, bpb);
       current = next;

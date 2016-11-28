@@ -19,7 +19,6 @@
 #include "dos.h"
 
 /* get_name retrieves the filename from a directory entry */
-
 void get_name(char *fullname, struct direntry *dirent)
 {
   char name[9];
