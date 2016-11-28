@@ -234,8 +234,8 @@ void find_referenced_clusters(uint16_t cluster, uint8_t *image_buf, struct bpb33
  * Extracts just the filename part for the file string
  */
 char* extractFileName(char *file) {
-  char *p2 = file;
-  for (int i = 0; i < strlen(file); i++) {
+  char *p2 = file; int i;
+  for (i = 0; i < strlen(file); i++) {
     if (p2[i] == '/' || p2[i] == '\\') {
       file = p2+i+1;
     }
@@ -247,7 +247,8 @@ char* extractFileName(char *file) {
  * Updates the string to be uppercase
  */
 void get_uppercase_string(char *string) {
-  for (int i = 0; i < strlen(string); i++) {
+  int i;
+  for (i = 0; i < strlen(string); i++) {
     string[i] = toupper(string[i]);
   }
 }
@@ -353,8 +354,8 @@ void mark_clusters_referenced(int cluster, uint8_t *image_buf, struct bpb33* bpb
  * Displays the unreferenced clusters, as specified in the assignment
  */
 void display_unreferenced_clusters(uint8_t *image_buf, struct bpb33* bpb, bool *referenced_clusters, int total_clusters) {
-  bool title_displayed = false;
-  for(int i = 2; i < total_clusters; i++) {
+  bool title_displayed = false; int i;
+  for(i = 2; i < total_clusters; i++) {
     if(referenced_clusters[i] == false && get_fat_entry(i, image_buf, bpb) != CLUST_FREE) {
       if(!title_displayed) { printf("Unreferenced: "); title_displayed = true; }
       printf("%i ", i);
@@ -365,8 +366,8 @@ void display_unreferenced_clusters(uint8_t *image_buf, struct bpb33* bpb, bool *
 
 void find_unreferenced_files(uint8_t *image_buf, struct bpb33* bpb, bool *referenced_clusters, int total_clusters) {
   uint8_t files_found = 1;
-
-  for(int i = 2; i < total_clusters; i++) {
+  int i;
+  for(i = 2; i < total_clusters; i++) {
     if(referenced_clusters[i] == false && get_fat_entry(i, image_buf, bpb) != CLUST_FREE) {
       uint16_t size = get_file_size(i, image_buf, bpb);
       mark_clusters_referenced(i, image_buf, bpb, referenced_clusters);
