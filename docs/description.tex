@@ -29,11 +29,11 @@ To achieve these goals, the coursework makes use of a similar infrastructure pro
   If that is the case, it prints the cluster to \texttt{stdout}.
 
   \item Next, uses a very similar technique to locate the lost files. Again, the program iterates through the \\\texttt{referenced\_clusters} array.
-  If the value is set to \texttt{false} and the cluster is not free, the program calculates the file of the program by visiting all of the FAT values, starting from the cluster that was not referenced.
+  If the value is set to \texttt{false} and the cluster is not free, the program calculates the size of the file by visiting all of the FAT values, starting from the cluster that was not referenced.
   Finally it creates a new file in the root directory and sets the appropriate name, extension, size and start cluster.
   This approach assumes that a file always starts with the lowest cluster. For instance a file might consist of the clusters $3 \rightarrow 6 \rightarrow 4 \rightarrow 9 \rightarrow 10$ but not $6 \rightarrow 3 \rightarrow 4 \rightarrow 9 \rightarrow 10$ since $6 > \min(clusters)$.
 
-  \item To check if all file lengths are consistent, it program again iterates through all directories recursively and checks the file length for every file. This definitely checks every file because we previously creates a new file in the root directory for every unreferenced file.
+  \item To check if all file lengths are consistent, the program again iterates through all directories recursively and checks the file length. This definitely checks every file because we previously creates a new file in the root directory for every unreferenced file.
   If the file length is inconsistent with the one in the FAT, it then frees up the memory as described in the next step.
 
   \item To free all of blocks beyond the end of that file, the program simply frees all of the clusters beyond the end and then sets the appropriate cluster as the end of file (EOF).
