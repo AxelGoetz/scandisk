@@ -12,3 +12,13 @@ This is a very simple scandisk for a FAT12 filesystem that performs several chec
 First run `make` and then run `./dos_scandisk <imagename>`.
 There are 3 images provided in the `images` directory.
 For `floppy.img`, the program does not output anything because the filesystem is already consistent.
+
+## File Structure
+```
+.
+├── dos_scandisk.c            # The file that checks the file structure and produces the output to stdout
+├── badfloppy2-output.txt     # Output of badfloppy2.img in a txt format
+├── badfloppy2-output.png     # Screenshot of output of badfloppy2.img
+├── description.pdf           # One page description of how dos_scandisk.c workss
+└── README.md
+```
