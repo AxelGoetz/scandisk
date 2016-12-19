@@ -18,7 +18,7 @@
 #include "dos.h"
 
 /**
- * Removes padding from both name and extension
+ * Removes padding from a given string
  */
 void removePadding(char *string, u_int8_t length) {
   int i;
@@ -32,7 +32,8 @@ void removePadding(char *string, u_int8_t length) {
 }
 
 /**
- * Gets the file name
+ * Gets the file name full filename in the current dirent and stores it
+ * in the `fullname` variable.
  */
 void get_name(char *fullname, struct direntry *dirent)
 {
@@ -59,7 +60,8 @@ void get_name(char *fullname, struct direntry *dirent)
 
 /**
   * find_file seeks through the directories in the memory disk image,
-  * until it finds the named file
+  * until it finds the named file.
+  * @return the direntry of the file or NULL if it doesn't exist.
   */
 #define FIND_FILE 0
 #define FIND_DIR 1
@@ -231,7 +233,7 @@ void find_referenced_clusters(uint16_t cluster, uint8_t *image_buf, struct bpb33
 }
 
 /**
- * Extracts just the filename part for the file string
+ * Extracts just the filename part frim the file string.
  */
 char* extractFileName(char *file) {
   char *p2 = file; int i;
@@ -254,7 +256,7 @@ void get_uppercase_string(char *string) {
 }
 
 /**
- * Writes values into the directory entry
+ * Writes a new file into the directory entry
  */
 void write_dirent(struct direntry *dirent, char *filename, uint16_t start_cluster, uint32_t size) {
   char *p, *p2;
@@ -327,7 +329,7 @@ uint8_t create_new_file(int cluster, uint8_t *image_buf, struct bpb33* bpb, uint
 }
 
 /**
- * Gets the size of the given file (in clusters)
+ * Gets the size of the given file (in clusters) by going through the FAT.
  */
 uint32_t get_file_size(int cluster, uint8_t *image_buf, struct bpb33* bpb) {
   uint32_t size = 0;
@@ -364,6 +366,10 @@ void display_unreferenced_clusters(uint8_t *image_buf, struct bpb33* bpb, bool *
   if(title_displayed) printf("\n");
 }
 
+/**
+ * Goes through all unreferenced clusters and finds lost files.
+ * We assume that a lost file starts with the lowest cluster in the file.
+ */
 void find_unreferenced_files(uint8_t *image_buf, struct bpb33* bpb, bool *referenced_clusters, int total_clusters) {
   uint8_t files_found = 1;
   int i;
@@ -474,7 +480,6 @@ int main(int argc, char** argv) {
   int fd;
   uint8_t *image_buf = mmap_file(argv[1], &fd);
   struct bpb33 *bpb = check_bootsector(image_buf);
-
 
   int total_clusters = bpb->bpbSectors / bpb->bpbSecPerClust;
   bool *referenced_clusters = calloc(total_clusters, sizeof(bool));
